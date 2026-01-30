@@ -14,11 +14,11 @@ type VillaCardProps = {
     bedrooms: number;
     bathrooms: number;
     
-    // Correct Data from Service
-    lowestDailyPrice: string | null; 
-    calculatedPrice: string | null;  
+    // Unified Props
+    lowestDailyPrice: string | null;
+    calculatedPrice: string | null;
     nextAvailableDate: string | null;
-    nextAvailableGap: number | null; 
+    nextAvailableGap: number | null;
   }
 };
 
@@ -40,15 +40,17 @@ export default function VillaCard({ data }: VillaCardProps) {
       endDate.setDate(startDate.getDate() + data.nextAvailableGap);
       
       hasSmartDeal = true;
+      
+      const startDay = startDate.getDate();
+      const startMonth = startDate.toLocaleDateString('tr-TR', { month: 'short' });
+      const endDay = endDate.getDate();
+      const endMonth = endDate.toLocaleDateString('tr-TR', { month: 'short' });
 
-      // Format Date: Handle Month Change (e.g., 28 May - 2 Jun)
+      // Handle Month Transitions (e.g. 28 May - 2 Jun)
       if (startDate.getMonth() !== endDate.getMonth()) {
-         const startStr = startDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-         const endStr = endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-         dateLabel = `${startStr} - ${endStr} Fırsatı`;
+         dateLabel = `${startDay} ${startMonth} - ${endDay} ${endMonth} Fırsatı`;
       } else {
-         const endStr = endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
-         dateLabel = `${startDate.getDate()} - ${endStr} Fırsatı`;
+         dateLabel = `${startDay} - ${endDay} ${startMonth} Fırsatı`;
       }
     }
   }
@@ -57,28 +59,19 @@ export default function VillaCard({ data }: VillaCardProps) {
     <Link href={`/villa/${data.slug}`} className="group block bg-white rounded-[24px] border border-neutral-100 hover:shadow-xl transition-all duration-300 overflow-hidden">
       <div className="relative aspect-[4/3] bg-neutral-100 mb-4">
         {data.image ? (
-          <Image 
-            src={data.image} 
-            alt={String(title)} 
-            fill 
-            className="object-cover transition-transform duration-700 group-hover:scale-110"
-          />
+          <Image src={data.image} alt={String(title)} fill className="object-cover transition-transform duration-700 group-hover:scale-110"/>
         ) : (
           <div className="flex items-center justify-center h-full text-neutral-300">Resim Yok</div>
         )}
 
-        {/* Tags */}
         {data.tags && data.tags.length > 0 && (
           <div className="absolute top-4 left-4 flex flex-col gap-2">
             {data.tags.map((tag, i) => (
-              <span key={i} className="bg-white/90 backdrop-blur text-black text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm">
-                {tag}
-              </span>
+              <span key={i} className="bg-white/90 backdrop-blur text-black text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm">{tag}</span>
             ))}
           </div>
         )}
 
-        {/* Fallback Date Badge */}
         {!hasSmartDeal && data.nextAvailableDate && (
            <div className="absolute top-4 right-4 bg-black/70 backdrop-blur text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1">
              <CalendarDays size={12} /> {new Date(data.nextAvailableDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
@@ -88,12 +81,8 @@ export default function VillaCard({ data }: VillaCardProps) {
 
       <div className="px-5 pb-5 space-y-3">
         <div className="flex justify-between items-start">
-          <h3 className="font-bold text-lg text-neutral-900 leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">
-            {String(title)}
-          </h3>
-          <div className="flex items-center gap-1 text-xs font-bold text-neutral-500 whitespace-nowrap">
-             <MapPin size={12} /> {locName}
-          </div>
+          <h3 className="font-bold text-lg text-neutral-900 leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">{String(title)}</h3>
+          <div className="flex items-center gap-1 text-xs font-bold text-neutral-500 whitespace-nowrap"><MapPin size={12} /> {locName}</div>
         </div>
 
         <div className="flex items-center gap-3 text-sm text-neutral-500 py-1">
@@ -104,27 +93,17 @@ export default function VillaCard({ data }: VillaCardProps) {
 
         <div className="pt-2 border-t border-dashed mt-2">
             {hasSmartDeal ? (
-              // CASE 1: Smart Deal
               <div className="animate-in fade-in">
-                <div className="text-[10px] uppercase font-bold text-blue-600 mb-0.5">
-                    {dateLabel}
-                </div>
+                <div className="text-[10px] uppercase font-bold text-blue-600 mb-0.5">{dateLabel}</div>
                 <div className="flex items-baseline gap-1">
-                   <span className="text-xl font-black text-rose-600">
-                     {currencySymbol}{Math.round(Number(data.calculatedPrice))}
-                   </span>
-                   <span className="text-xs text-neutral-400 font-medium">
-                     / {data.nextAvailableGap} gece
-                   </span>
+                   <span className="text-xl font-black text-rose-600">{currencySymbol}{Math.round(Number(data.calculatedPrice))}</span>
+                   <span className="text-xs text-neutral-400 font-medium">/ {data.nextAvailableGap} gece</span>
                 </div>
               </div>
             ) : data.lowestDailyPrice ? (
-              // CASE 2: Starts From
               <div>
                  <div className="text-[10px] uppercase font-bold text-neutral-400">Gecelik Başlayan</div>
-                 <span className="text-xl font-black text-neutral-900">
-                    {currencySymbol}{Math.round(Number(data.lowestDailyPrice))}
-                 </span>
+                 <span className="text-xl font-black text-neutral-900">{currencySymbol}{Math.round(Number(data.lowestDailyPrice))}</span>
               </div>
             ) : (
               <span className="text-sm font-bold text-neutral-400">Fiyat Sorunuz</span>

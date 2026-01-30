@@ -7,20 +7,17 @@ export async function updatePropertyIndex(propertyId: number) {
   try {
     console.log(`[Indexer] Analyzing Villa ${propertyId}...`);
 
-    // 1. GET SETTINGS
+    // 1. SETTINGS
     const villa = await db.query.properties.findFirst({
       where: eq(properties.id, propertyId),
       columns: { defaultMinStay: true }
     });
     const minStay = villa?.defaultMinStay || 5;
 
-    // 2. GET "STARTS FROM" PRICE (Lowest future daily price)
+    // 2. LOWEST DAILY PRICE (Starts From)
     const todayStr = new Date().toISOString().split('T')[0];
-    
     const minPriceResult = await db
-      .select({ 
-        minPrice: sql<number>`MIN(${dailyPrices.price})` 
-      })
+      .select({ minPrice: sql<number>`MIN(${dailyPrices.price})` })
       .from(dailyPrices)
       .where(and(
         eq(dailyPrices.propertyId, propertyId),
@@ -29,10 +26,10 @@ export async function updatePropertyIndex(propertyId: number) {
     
     const lowestDaily = minPriceResult[0]?.minPrice || 0;
 
-    // 3. SMART ALGORITHM: Find first bookable range
+    // 3. SMART DEAL FINDER (First Valid Gap)
     const today = new Date();
     
-    // Fetch Prices (In Memory)
+    // Fetch Data (In Memory for Speed)
     const allPrices = await db.query.dailyPrices.findMany({
       where: and(
         eq(dailyPrices.propertyId, propertyId),
@@ -40,13 +37,10 @@ export async function updatePropertyIndex(propertyId: number) {
       ),
       columns: { date: true }
     });
+    const priceMap = new Set(allPrices.map(p => 
+      typeof p.date === 'string' ? p.date : new Date(p.date).toISOString().split('T')[0]
+    ));
 
-    // Create Set for fast lookup
-    const priceMap = new Set(allPrices.map(p => {
-        return typeof p.date === 'string' ? p.date : new Date(p.date).toISOString().split('T')[0];
-    }));
-
-    // Fetch Availability (In Memory)
     const allBlocks = await db.query.availability.findMany({
       where: and(
         eq(availability.propertyId, propertyId),
@@ -55,83 +49,68 @@ export async function updatePropertyIndex(propertyId: number) {
       )
     });
 
-    // SCAN LOOP (Next 365 days)
     let foundStart: Date | null = null;
     let foundEnd: Date | null = null;
 
+    // Scan next 365 days
     for (let i = 1; i <= 365; i++) {
         const checkStart = new Date(today);
         checkStart.setDate(today.getDate() + i);
         const checkStartStr = checkStart.toISOString().split('T')[0];
 
-        // OPTIMIZATION: If start day has no price, skip
         if (!priceMap.has(checkStartStr)) continue;
 
-        // Determine range
         const checkEnd = new Date(checkStart);
         checkEnd.setDate(checkEnd.getDate() + minStay);
         
-        // VALIDATE RANGE
-        let isRangeValid = true;
-
-        // A) Price Check: Every day must have a price
+        // VALIDATION
+        let isValid = true;
+        // A) Price Check
         for (let d = 0; d < minStay; d++) {
-            const currentDay = new Date(checkStart);
-            currentDay.setDate(currentDay.getDate() + d);
-            const currentDayStr = currentDay.toISOString().split('T')[0];
-
-            if (!priceMap.has(currentDayStr)) {
-                isRangeValid = false;
-                break;
-            }
+            const cur = new Date(checkStart);
+            cur.setDate(cur.getDate() + d);
+            if (!priceMap.has(cur.toISOString().split('T')[0])) { isValid = false; break; }
         }
-        if (!isRangeValid) continue;
+        if (!isValid) continue;
 
-        // B) Block Check: No overlaps with blocked dates
+        // B) Block Check
         const isBlocked = allBlocks.some(block => {
             const bStart = new Date(block.startDate);
             const bEnd = new Date(block.endDate);
             return (checkStart < bEnd && checkEnd > bStart);
         });
-
         if (isBlocked) continue;
 
-        // Found it!
+        // Found!
         foundStart = checkStart;
         foundEnd = checkEnd;
         break; 
     }
 
-    // 4. CALCULATE PACKAGE PRICE
+    // 4. CALCULATE PACKAGE
     let calculation = null;
     if (foundStart && foundEnd) {
         calculation = await calculatePriceForRange(propertyId, foundStart, foundEnd);
     }
 
-    // 5. SAVE TO DB
+    // 5. SAVE (Standardized Fields)
     const dataToSave = {
         propertyId,
-        minPrice: lowestDaily.toString(), // "Starts From"
-        
-        calculatedPrice: calculation ? calculation.finalPrice.toString() : null, // "Smart Deal"
+        minPrice: lowestDaily.toString(),
+        calculatedPrice: calculation ? calculation.finalPrice.toString() : null,
         calculatedCurrency: calculation ? calculation.currency : "EUR",
-        
         nextAvailableDate: foundStart ? foundStart.toISOString().split('T')[0] : null,
-        nextAvailableGap: minStay, // Save the Duration
-        
+        nextAvailableGap: minStay,
         activePromoTags: calculation ? calculation.appliedPromotions.map(p => p.name) : [],
         lastUpdated: new Date()
     };
 
     await db.insert(propertySearchIndex).values(dataToSave)
-        .onConflictDoUpdate({
-            target: propertySearchIndex.propertyId,
-            set: dataToSave
-        });
+        .onConflictDoUpdate({ target: propertySearchIndex.propertyId, set: dataToSave });
 
-    console.log(`[Indexer] Villa ${propertyId} Updated.`);
+    console.log(`[Indexer] Updated Villa ${propertyId}. Gap: ${minStay}, Price: ${dataToSave.calculatedPrice}`);
 
   } catch (error) {
-    console.error(`[Indexer] Error on Villa ${propertyId}:`, error);
+    console.error(`[Indexer] Failed:`, error);
   }
 }

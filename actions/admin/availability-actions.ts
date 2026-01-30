@@ -8,44 +8,53 @@ import { updatePropertyIndex } from "@/services/indexer";
 
 export async function toggleBlockDatesAction(
   propertyId: number,
-  startDate: Date,
-  endDate: Date,
+  startDateStr: string, // <-- Accepting String "YYYY-MM-DD"
+  endDateStr: string,   // <-- Accepting String "YYYY-MM-DD"
   shouldBlock: boolean 
 ) {
   try {
-    const startStr = startDate.toISOString().split("T")[0];
-    const endStr = endDate.toISOString().split("T")[0];
+    // 1. CALCULATE EXCLUSIVE END DATE (For Database)
+    // The user selected "10 to 12" (inclusive). They want the night of the 12th blocked.
+    // The database treats 'endDate' as the "Check-out" morning.
+    // So we need to save: Start: 10, End: 13.
+    
+    // We use 'new Date(str)' which defaults to UTC midnight for YYYY-MM-DD strings.
+    // This is safe because we only do math, not timezone conversion.
+    const endObj = new Date(endDateStr); 
+    endObj.setDate(endObj.getDate() + 1);
+    
+    const finalEndStr = endObj.toISOString().split("T")[0]; // "2024-08-13"
 
-    // Cleanup overlaps
+    // 2. CLEANUP: Remove overlapping blocks
     await db.delete(availability).where(
       and(
         eq(availability.propertyId, propertyId),
         or(
-          and(gte(availability.startDate, startStr), lte(availability.startDate, endStr)),
-          and(gte(availability.endDate, startStr), lte(availability.endDate, endStr)),
-          and(lte(availability.startDate, startStr), gte(availability.endDate, endStr))
+          and(gte(availability.startDate, startDateStr), lte(availability.startDate, finalEndStr)),
+          and(gte(availability.endDate, startDateStr), lte(availability.endDate, finalEndStr)),
+          and(lte(availability.startDate, startDateStr), gte(availability.endDate, finalEndStr))
         )
       )
     );
 
-    // Insert Block
+    // 3. INSERT: Save the block
     if (shouldBlock) {
       await db.insert(availability).values({
         propertyId,
-        startDate: startStr,
-        endDate: endStr,
+        startDate: startDateStr,
+        endDate: finalEndStr,
         isBlocked: true,
         source: "manual",
       });
     }
 
-    // Re-Index
+    // 4. RE-INDEX: Update homepage visibility
     try { await updatePropertyIndex(propertyId); } catch (e) { console.error(e); }
 
     revalidatePath(`/admin/properties/${propertyId}/edit`);
     return { success: true };
   } catch (error) {
-    console.error("Block Action Error:", error);
-    return { success: false, error: "Database operation failed." };
+    console.error("Availability Action Error:", error);
+    return { success: false, error: "Database error." };
   }
 }

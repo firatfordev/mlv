@@ -10,13 +10,11 @@ export async function getListedProperties() {
       title: properties.title,
       location: locations.name,
       
-      // --- CORRECT MAPPING ---
+      // UNIFIED NAMING
       lowestDailyPrice: propertySearchIndex.minPrice, 
       calculatedPrice: propertySearchIndex.calculatedPrice,
-      
       nextAvailableDate: propertySearchIndex.nextAvailableDate,
-      nextAvailableGap: propertySearchIndex.nextAvailableGap, // Critical!
-      
+      nextAvailableGap: propertySearchIndex.nextAvailableGap,
       currency: propertySearchIndex.calculatedCurrency,
       tags: propertySearchIndex.activePromoTags,
       
@@ -32,6 +30,7 @@ export async function getListedProperties() {
     .orderBy(desc(properties.rank));
 }
 
+// Ensure filtered queries also return the exact same shape
 export async function getPropertiesByFilter(filterType: "promoted" | "recommended" | "all", limit: number = 20) {
   return await db
     .select({
@@ -44,7 +43,6 @@ export async function getPropertiesByFilter(filterType: "promoted" | "recommende
       calculatedPrice: propertySearchIndex.calculatedPrice,
       nextAvailableDate: propertySearchIndex.nextAvailableDate,
       nextAvailableGap: propertySearchIndex.nextAvailableGap,
-      
       currency: propertySearchIndex.calculatedCurrency,
       tags: propertySearchIndex.activePromoTags,
       

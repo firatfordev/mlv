@@ -72,6 +72,9 @@ importers:
       '@types/react':
         specifier: ^19
         version: 19.2.10
+      '@types/react-datepicker':
+        specifier: ^7.0.0
+        version: 7.0.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
       '@types/react-dom':
         specifier: ^19
         version: 19.2.3(@types/react@19.2.10)
@@ -1097,6 +1100,10 @@ packages:
 
   '@types/pg@8.16.0':
     resolution: {integrity: sha512-RmhMd/wD+CF8Dfo+cVIy3RR5cl8CyfXQ0tGgW6XBL8L4LM/UTEbNXYRbLwU6w+CgrKBNbrQWt4FUtTfaU5jSYQ==}
+
+  '@types/react-datepicker@7.0.0':
+    resolution: {integrity: sha512-4tWwOUq589tozyQPBVEqGNng5DaZkomx5IVNuur868yYdgjH6RaL373/HKiVt1IDoNNXYiTGspm1F7kjrarM8Q==}
+    deprecated: This is a stub types definition. react-datepicker provides its own type definitions, so you do not need this installed.
 
   '@types/react-dom@19.2.3':
     resolution: {integrity: sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ==}
@@ -3563,6 +3570,14 @@ snapshots:
       '@types/node': 20.19.30
       pg-protocol: 1.11.0
       pg-types: 2.2.0
+
+  '@types/react-datepicker@7.0.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)':
+    dependencies:
+      react-datepicker: 9.1.0(react-dom@19.2.3(react@19.2.3))(react@19.2.3)
+    transitivePeerDependencies:
+      - date-fns-tz
+      - react
+      - react-dom
 
   '@types/react-dom@19.2.3(@types/react@19.2.10)':
     dependencies:
