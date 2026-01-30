@@ -14,11 +14,11 @@ type VillaCardProps = {
     bedrooms: number;
     bathrooms: number;
     
-    // Updated Props from Property Service
-    lowestDailyPrice: string | null; // Daily "Starts From"
-    calculatedPrice: string | null;  // Total "Smart Deal"
+    // Correct Data from Service
+    lowestDailyPrice: string | null; 
+    calculatedPrice: string | null;  
     nextAvailableDate: string | null;
-    nextAvailableGap: number | null; // Duration (e.g., 5 days)
+    nextAvailableGap: number | null; 
   }
 };
 
@@ -26,16 +26,12 @@ export default function VillaCard({ data }: VillaCardProps) {
   const getLoc = (val: any) => (typeof val === 'object' && val?.tr ? val.tr : val);
   const title = getLoc(data.title) || "Villa";
   const locName = data.location ? getLoc(data.location.name) : "";
-  
-  // Choose currency (Deal currency > Default currency > EUR)
-  const currencyCode = data.currency || "EUR";
-  const currencySymbol = currencyCode === "TRY" ? "₺" : currencyCode === "USD" ? "$" : "€";
+  const currencySymbol = (data.currency || "EUR") === "TRY" ? "₺" : (data.currency || "EUR") === "USD" ? "$" : "€";
 
   // --- SMART DATE LOGIC ---
   let dateLabel = "";
   let hasSmartDeal = false;
 
-  // Logic: We need a Date + Gap + Package Price to show the deal
   if (data.nextAvailableDate && data.nextAvailableGap && data.calculatedPrice) {
     const startDate = new Date(data.nextAvailableDate);
     
@@ -44,14 +40,21 @@ export default function VillaCard({ data }: VillaCardProps) {
       endDate.setDate(startDate.getDate() + data.nextAvailableGap);
       
       hasSmartDeal = true;
-      dateLabel = `${startDate.getDate()} - ${endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })} Fırsatı`;
+
+      // Format Date: Handle Month Change (e.g., 28 May - 2 Jun)
+      if (startDate.getMonth() !== endDate.getMonth()) {
+         const startStr = startDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+         const endStr = endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+         dateLabel = `${startStr} - ${endStr} Fırsatı`;
+      } else {
+         const endStr = endDate.toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' });
+         dateLabel = `${startDate.getDate()} - ${endStr} Fırsatı`;
+      }
     }
   }
 
   return (
     <Link href={`/villa/${data.slug}`} className="group block bg-white rounded-[24px] border border-neutral-100 hover:shadow-xl transition-all duration-300 overflow-hidden">
-      
-      {/* IMAGE SECTION */}
       <div className="relative aspect-[4/3] bg-neutral-100 mb-4">
         {data.image ? (
           <Image 
@@ -75,7 +78,7 @@ export default function VillaCard({ data }: VillaCardProps) {
           </div>
         )}
 
-        {/* Fallback Date Badge (Shows if we have date but logic failed to make a deal) */}
+        {/* Fallback Date Badge */}
         {!hasSmartDeal && data.nextAvailableDate && (
            <div className="absolute top-4 right-4 bg-black/70 backdrop-blur text-white text-[10px] font-bold px-3 py-1.5 rounded-full flex items-center gap-1">
              <CalendarDays size={12} /> {new Date(data.nextAvailableDate).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' })}
@@ -83,7 +86,6 @@ export default function VillaCard({ data }: VillaCardProps) {
         )}
       </div>
 
-      {/* INFO SECTION */}
       <div className="px-5 pb-5 space-y-3">
         <div className="flex justify-between items-start">
           <h3 className="font-bold text-lg text-neutral-900 leading-tight group-hover:text-blue-600 transition-colors line-clamp-1">
@@ -100,10 +102,9 @@ export default function VillaCard({ data }: VillaCardProps) {
           <span className="flex items-center gap-1"><Bath size={14} /> {data.bathrooms}</span>
         </div>
 
-        {/* PRICING SECTION */}
         <div className="pt-2 border-t border-dashed mt-2">
             {hasSmartDeal ? (
-              // CASE 1: Smart Deal Found (Shows Date Range + Total Price)
+              // CASE 1: Smart Deal
               <div className="animate-in fade-in">
                 <div className="text-[10px] uppercase font-bold text-blue-600 mb-0.5">
                     {dateLabel}
@@ -118,7 +119,7 @@ export default function VillaCard({ data }: VillaCardProps) {
                 </div>
               </div>
             ) : data.lowestDailyPrice ? (
-              // CASE 2: No Deal, Show "Starts From" (Daily)
+              // CASE 2: Starts From
               <div>
                  <div className="text-[10px] uppercase font-bold text-neutral-400">Gecelik Başlayan</div>
                  <span className="text-xl font-black text-neutral-900">
@@ -126,7 +127,6 @@ export default function VillaCard({ data }: VillaCardProps) {
                  </span>
               </div>
             ) : (
-              // CASE 3: No Pricing
               <span className="text-sm font-bold text-neutral-400">Fiyat Sorunuz</span>
             )}
         </div>

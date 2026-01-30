@@ -10,16 +10,12 @@ export async function getListedProperties() {
       title: properties.title,
       location: locations.name,
       
-      // --- CORRECT DATA MAPPING ---
-      // 1. "Starts From" Price (Daily)
+      // --- CORRECT MAPPING ---
       lowestDailyPrice: propertySearchIndex.minPrice, 
-      
-      // 2. "Smart Package" Price (Total)
       calculatedPrice: propertySearchIndex.calculatedPrice,
       
-      // 3. Date & Duration
       nextAvailableDate: propertySearchIndex.nextAvailableDate,
-      nextAvailableGap: propertySearchIndex.nextAvailableGap, // Critical for calculating End Date
+      nextAvailableGap: propertySearchIndex.nextAvailableGap, // Critical!
       
       currency: propertySearchIndex.calculatedCurrency,
       tags: propertySearchIndex.activePromoTags,
@@ -44,7 +40,6 @@ export async function getPropertiesByFilter(filterType: "promoted" | "recommende
       title: properties.title,
       location: locations.name,
       
-      // Same mapping as above
       lowestDailyPrice: propertySearchIndex.minPrice,
       calculatedPrice: propertySearchIndex.calculatedPrice,
       nextAvailableDate: propertySearchIndex.nextAvailableDate,
@@ -72,7 +67,6 @@ export async function getPropertiesByFilter(filterType: "promoted" | "recommende
     .limit(limit);
 }
 
-// ... getVillaBySlug remains the same
 export async function getVillaBySlug(slug: string) {
   const villa = await db.query.properties.findFirst({
     where: eq(properties.slug, slug),

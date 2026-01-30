@@ -7,14 +7,14 @@ export async function updatePropertyIndex(propertyId: number) {
   try {
     console.log(`[Indexer] Analyzing Villa ${propertyId}...`);
 
-    // 1. SETTINGS
+    // 1. GET SETTINGS
     const villa = await db.query.properties.findFirst({
       where: eq(properties.id, propertyId),
       columns: { defaultMinStay: true }
     });
     const minStay = villa?.defaultMinStay || 5;
 
-    // 2. GET "STARTS FROM" PRICE (Lowest daily price in future)
+    // 2. GET "STARTS FROM" PRICE (Lowest future daily price)
     const todayStr = new Date().toISOString().split('T')[0];
     
     const minPriceResult = await db
@@ -41,8 +41,8 @@ export async function updatePropertyIndex(propertyId: number) {
       columns: { date: true }
     });
 
+    // Create Set for fast lookup
     const priceMap = new Set(allPrices.map(p => {
-        // Ensure strictly YYYY-MM-DD string
         return typeof p.date === 'string' ? p.date : new Date(p.date).toISOString().split('T')[0];
     }));
 
@@ -55,7 +55,7 @@ export async function updatePropertyIndex(propertyId: number) {
       )
     });
 
-    // Scan for gap
+    // SCAN LOOP (Next 365 days)
     let foundStart: Date | null = null;
     let foundEnd: Date | null = null;
 
@@ -64,16 +64,17 @@ export async function updatePropertyIndex(propertyId: number) {
         checkStart.setDate(today.getDate() + i);
         const checkStartStr = checkStart.toISOString().split('T')[0];
 
+        // OPTIMIZATION: If start day has no price, skip
         if (!priceMap.has(checkStartStr)) continue;
 
         // Determine range
         const checkEnd = new Date(checkStart);
         checkEnd.setDate(checkEnd.getDate() + minStay);
         
-        // Validate Range
+        // VALIDATE RANGE
         let isRangeValid = true;
 
-        // A) Price Check
+        // A) Price Check: Every day must have a price
         for (let d = 0; d < minStay; d++) {
             const currentDay = new Date(checkStart);
             currentDay.setDate(currentDay.getDate() + d);
@@ -86,7 +87,7 @@ export async function updatePropertyIndex(propertyId: number) {
         }
         if (!isRangeValid) continue;
 
-        // B) Block Check
+        // B) Block Check: No overlaps with blocked dates
         const isBlocked = allBlocks.some(block => {
             const bStart = new Date(block.startDate);
             const bEnd = new Date(block.endDate);
@@ -95,7 +96,7 @@ export async function updatePropertyIndex(propertyId: number) {
 
         if (isBlocked) continue;
 
-        // Found it
+        // Found it!
         foundStart = checkStart;
         foundEnd = checkEnd;
         break; 
@@ -107,16 +108,16 @@ export async function updatePropertyIndex(propertyId: number) {
         calculation = await calculatePriceForRange(propertyId, foundStart, foundEnd);
     }
 
-    // 5. SAVE TO DB (Correct Mapping)
+    // 5. SAVE TO DB
     const dataToSave = {
         propertyId,
-        minPrice: lowestDaily.toString(), //
+        minPrice: lowestDaily.toString(), // "Starts From"
         
-        calculatedPrice: calculation ? calculation.finalPrice.toString() : null, //
+        calculatedPrice: calculation ? calculation.finalPrice.toString() : null, // "Smart Deal"
         calculatedCurrency: calculation ? calculation.currency : "EUR",
         
         nextAvailableDate: foundStart ? foundStart.toISOString().split('T')[0] : null,
-        nextAvailableGap: minStay,
+        nextAvailableGap: minStay, // Save the Duration
         
         activePromoTags: calculation ? calculation.appliedPromotions.map(p => p.name) : [],
         lastUpdated: new Date()
@@ -128,7 +129,7 @@ export async function updatePropertyIndex(propertyId: number) {
             set: dataToSave
         });
 
-    console.log(`[Indexer] Villa ${propertyId} Updated. Daily: ${dataToSave.minPrice}, Package: ${dataToSave.calculatedPrice}`);
+    console.log(`[Indexer] Villa ${propertyId} Updated.`);
 
   } catch (error) {
     console.error(`[Indexer] Error on Villa ${propertyId}:`, error);
