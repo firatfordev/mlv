@@ -16,7 +16,7 @@ export async function toggleBlockDatesAction(
     const startStr = startDate.toISOString().split("T")[0];
     const endStr = endDate.toISOString().split("T")[0];
 
-    // 1. CLEANUP: Delete any overlapping blocks to keep data clean
+    // Cleanup overlaps
     await db.delete(availability).where(
       and(
         eq(availability.propertyId, propertyId),
@@ -28,7 +28,7 @@ export async function toggleBlockDatesAction(
       )
     );
 
-    // 2. INSERT: Block if requested
+    // Insert Block
     if (shouldBlock) {
       await db.insert(availability).values({
         propertyId,
@@ -39,13 +39,13 @@ export async function toggleBlockDatesAction(
       });
     }
 
-    // 3. RE-INDEX: Update homepage data
+    // Re-Index
     try { await updatePropertyIndex(propertyId); } catch (e) { console.error(e); }
 
     revalidatePath(`/admin/properties/${propertyId}/edit`);
     return { success: true };
   } catch (error) {
-    console.error("Availability Action Error:", error);
-    return { success: false, error: "Database error." };
+    console.error("Block Action Error:", error);
+    return { success: false, error: "Database operation failed." };
   }
 }

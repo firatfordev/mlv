@@ -22,21 +22,19 @@ export default async function EditPropertyPage({
     where: eq(properties.id, propertyId),
     with: { location: true },
   });
-
   if (!property) notFound();
 
-  // 1. FETCH PRICES
+  // 1. PRICES: Convert to String Map
   const rawPrices = await db.query.dailyPrices.findMany({
     where: eq(dailyPrices.propertyId, propertyId),
   });
   const formattedPrices: Record<string, number> = {};
   rawPrices.forEach((p) => {
-    // Standardize dates
     const dStr = typeof p.date === 'string' ? p.date : new Date(p.date).toISOString().split('T')[0];
     formattedPrices[dStr] = Number(p.price);
   });
 
-  // 2. FETCH BLOCKED DATES (NEW)
+  // 2. BLOCKS: Convert to String Range
   const rawBlocks = await db.query.availability.findMany({
     where: and(
         eq(availability.propertyId, propertyId),
@@ -44,11 +42,11 @@ export default async function EditPropertyPage({
     )
   });
   const blockedRanges = rawBlocks.map(b => ({
-    start: new Date(b.startDate),
-    end: new Date(b.endDate)
+    start: typeof b.startDate === 'string' ? b.startDate : new Date(b.startDate).toISOString().split('T')[0],
+    end: typeof b.endDate === 'string' ? b.endDate : new Date(b.endDate).toISOString().split('T')[0]
   }));
 
-  // 3. OTHER DATA
+  // Other Data...
   const images = await db.query.propertyImages.findMany({
     where: eq(propertyImages.propertyId, propertyId),
     orderBy: (t, { asc }) => [asc(t.order)],
@@ -71,9 +69,7 @@ export default async function EditPropertyPage({
     <div className="max-w-6xl mx-auto py-10 px-6 pb-40">
       <div className="flex flex-col md:flex-row md:justify-between md:items-end gap-4 mb-10 border-b pb-6">
         <div>
-          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">
-            {(property.title as any).tr || "Villa"}
-          </h1>
+          <h1 className="text-3xl font-black text-neutral-900 tracking-tight">{(property.title as any).tr || "Villa"}</h1>
           <p className="text-neutral-500 mt-2 flex items-center gap-2">
             <span className="bg-neutral-100 px-2 py-1 rounded text-xs font-bold font-mono text-neutral-600">{property.refCode}</span>
             <span className="text-sm">Admin Panel</span>
@@ -81,7 +77,7 @@ export default async function EditPropertyPage({
         </div>
         <div className="flex items-center gap-3">
             <PublishToggle propertyId={propertyId} isActive={!!property.isActive} />
-            <a href={`/villa/${property.slug}`} target="_blank" className="px-4 py-3 bg-white border border-neutral-200 rounded-full text-neutral-600 font-bold text-sm hover:bg-neutral-50">Preview</a>
+            <a href={`/villa/${property.slug}`} target="_blank" className="px-4 py-3 bg-white border border-neutral-200 rounded-full text-neutral-600 font-bold text-sm hover:bg-neutral-50">Önizle</a>
         </div>
       </div>
 
@@ -90,21 +86,17 @@ export default async function EditPropertyPage({
           <div className="flex items-center gap-3 mb-6">
             <div className="p-3 bg-rose-50 text-rose-600 rounded-2xl"><Calendar size={24} /></div>
             <div>
-              <h2 className="text-xl font-bold text-neutral-900">Price & Availability</h2>
+              <h2 className="text-xl font-bold text-neutral-900">Fiyat & Müsaitlik</h2>
+              <p className="text-sm text-neutral-500">Günlük fiyatları girin veya tarihleri kapatın.</p>
             </div>
           </div>
-          {/* UPDATED COMPONENT WITH BLOCKS */}
-          <PriceCalendar 
-            propertyId={propertyId} 
-            existingPrices={formattedPrices} 
-            blockedRanges={blockedRanges}
-          />
+          <PriceCalendar propertyId={propertyId} existingPrices={formattedPrices} blockedRanges={blockedRanges} />
         </section>
 
         <section>
            <div className="flex items-center gap-3 mb-6">
              <div className="p-3 bg-orange-50 text-orange-600 rounded-2xl"><TrendingUp size={24} /></div>
-             <h2 className="text-xl font-bold text-neutral-900">Showcase Settings</h2>
+             <h2 className="text-xl font-bold text-neutral-900">Vitrin Ayarları</h2>
            </div>
            <MarketingManager propertyId={propertyId} isPromoted={property.isPromoted || false} isRecommended={property.isRecommended || false} />
         </section>
@@ -112,7 +104,7 @@ export default async function EditPropertyPage({
         <section>
           <div className="flex items-center gap-3 mb-6">
             <div className="p-3 bg-blue-50 text-blue-600 rounded-2xl"><Settings size={24} /></div>
-            <h2 className="text-xl font-bold text-neutral-900">Gallery</h2>
+            <h2 className="text-xl font-bold text-neutral-900">Galeri</h2>
           </div>
           <ImageManager propertyId={propertyId} initialImages={images} />
         </section>
@@ -120,7 +112,7 @@ export default async function EditPropertyPage({
         <section>
           <div className="flex items-center gap-3 mb-6">
             <div className="p-3 bg-green-50 text-green-600 rounded-2xl"><Tag size={24} /></div>
-            <h2 className="text-xl font-bold text-neutral-900">Promotions</h2>
+            <h2 className="text-xl font-bold text-neutral-900">Kampanyalar</h2>
           </div>
           <PromoManager propertyId={propertyId} allPromotions={allPromos as any} activeIds={activePromoIds} />
         </section>
@@ -128,7 +120,7 @@ export default async function EditPropertyPage({
         <section>
           <div className="flex items-center gap-3 mb-6">
             <div className="p-3 bg-purple-50 text-purple-600 rounded-2xl"><Settings size={24} /></div>
-            <h2 className="text-xl font-bold text-neutral-900">Features</h2>
+            <h2 className="text-xl font-bold text-neutral-900">Özellikler</h2>
           </div>
           <FeatureManager propertyId={propertyId} masterFeatures={masterFeatureList} activeFeatures={formattedActiveFeatures} />
         </section>
