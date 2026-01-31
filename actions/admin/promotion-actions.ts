@@ -5,11 +5,11 @@ import { promotions, propertyPromotions } from "@/db/schema";
 import { eq, and } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
-// 1. YENİ KAMPANYA OLUŞTUR (Global)
+// 1. CREATE PROMOTION (Updated Type)
 export async function createPromotionAction(formData: FormData) {
   const getStr = (key: string) => formData.get(key) as string;
   const getNum = (key: string) => Number(formData.get(key)) || 0;
-  // Tarih boş gelirse null yap (Postgres boş string sevmez)
+  
   const getDate = (key: string) => {
     const val = formData.get(key) as string;
     return val ? val : null;
@@ -18,15 +18,14 @@ export async function createPromotionAction(formData: FormData) {
   try {
     await db.insert(promotions).values({
       name: getStr("name"),
-      type: getStr("type") as "percentage" | "fixed_amount",
+      // Allow 'free_days' in the type cast
+      type: getStr("type") as "percentage" | "fixed_amount" | "free_days",
       value: getStr("value"),
       
-      // NEW FIELDS
-      code: getStr("code") || null, // Boşsa null gönder
+      code: getStr("code") || null,
       minStay: getNum("min_stay") || null,
       advanceBookingDays: getNum("advance_booking_days") || null,
       
-      // Existing fields
       bookingWindowStart: getDate("booking_start"),
       bookingWindowEnd: getDate("booking_end"),
       travelWindowStart: getDate("travel_start"),
@@ -36,7 +35,7 @@ export async function createPromotionAction(formData: FormData) {
       isActive: true,
     });
 
-    revalidatePath("/admin/promotions");
+    revalidatePath("/admin/promotions"); // Assuming you use this page, otherwise just current path
     return { success: true };
   } catch (error) {
     console.error("Promo Create Error:", error);
@@ -44,7 +43,7 @@ export async function createPromotionAction(formData: FormData) {
   }
 }
 
-// 2. KAMPANYA SİL
+// 2. DELETE PROMOTION (Unchanged)
 export async function deletePromotionAction(id: number) {
   try {
     await db.delete(promotions).where(eq(promotions.id, id));
@@ -55,7 +54,7 @@ export async function deletePromotionAction(id: number) {
   }
 }
 
-// 3. VİLLAYA KAMPANYA ATA / KALDIR (Toggle)
+// 3. TOGGLE PROMOTION (Your Exact Logic)
 export async function togglePropertyPromotionAction(propertyId: number, promotionId: number, currentState: boolean) {
   try {
     if (currentState) {

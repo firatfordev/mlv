@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import DatePicker, { registerLocale } from "react-datepicker";
-import tr from "date-fns/locale/tr"; // Türkçe dil desteği
-import "react-datepicker/dist/react-datepicker.css"; // Varsayılan stiller
+import { tr } from "date-fns/locale";
+import "react-datepicker/dist/react-datepicker.css";
 import { format, eachDayOfInterval } from "date-fns";
 import { updatePriceCalendarAction } from "@/actions/admin/price-actions";
 import { toggleBlockDatesAction } from "@/actions/admin/availability-actions";
 import { Loader2, Save, Ban, Unlock, Euro, CalendarOff, RotateCcw } from "lucide-react";
 
-// Türkçe yerelleştirmeyi kaydet
+// Register Turkish locale
 registerLocale("tr", tr);
 
 type PriceCalendarProps = {
@@ -23,7 +23,7 @@ export default function PriceCalendar({
   existingPrices,
   blockedRanges,
 }: PriceCalendarProps) {
-  // react-datepicker için state (Başlangıç ve Bitiş)
+  // Use React-Datepicker state (Start/End)
   const [startDate, setStartDate] = useState<Date | null>(null);
   const [endDate, setEndDate] = useState<Date | null>(null);
   
@@ -32,15 +32,14 @@ export default function PriceCalendar({
   const [priceInput, setPriceInput] = useState<string>("");
   const [loading, setLoading] = useState(false);
 
-  // --- ARALIK SEÇİMİ ---
+  // --- RANGE SELECTION ---
   const onChange = (dates: [Date | null, Date | null]) => {
     const [start, end] = dates;
     setStartDate(start);
     setEndDate(end);
   };
 
-  // --- ACTIONS ---
-
+  // --- SAVE PRICE ---
   const handleSavePrice = async () => {
     if (!startDate || !endDate || !priceInput) return;
     setLoading(true);
@@ -49,7 +48,7 @@ export default function PriceCalendar({
     const tempPrices = { ...prices };
     const val = parseFloat(priceInput);
     
-    // Seçili aralıktaki günleri oluştur
+    // Generate all days in interval
     const days = eachDayOfInterval({ start: startDate, end: endDate });
 
     days.forEach((day) => {
@@ -65,16 +64,17 @@ export default function PriceCalendar({
       setEndDate(null);
       setPriceInput("");
     } else {
-      alert("Hata: " + res.error);
+      alert("Error: " + res.error);
     }
     setLoading(false);
   };
 
+  // --- BLOCK DATES ---
   const handleBlockToggle = async (shouldBlock: boolean) => {
     if (!startDate || !endDate) return;
     setLoading(true);
 
-    // Tarihleri string formatına çevirip gönderiyoruz (Timezone sorunu olmasın diye)
+    // Convert to String immediately to avoid Timezone shifts
     const startStr = format(startDate, "yyyy-MM-dd");
     const endStr = format(endDate, "yyyy-MM-dd");
 
@@ -84,28 +84,29 @@ export default function PriceCalendar({
       setStartDate(null);
       setEndDate(null);
     } else {
-      alert("Hata: " + res.error);
+      alert("Error: " + res.error);
     }
     setLoading(false);
   };
 
-  // --- GÜN RENDER FONKSİYONU ---
-  // Burası takvimin her günü için çalışır. İçeriği biz belirleriz.
+  // --- CUSTOM DAY RENDERER ---
+  // This is the magic part that fixes the visibility issue
   const renderDayContents = (day: number, date: Date) => {
     const dateKey = format(date, "yyyy-MM-dd");
     const price = prices[dateKey];
     
-    // Blok kontrolü (Exclusive bitiş mantığıyla)
+    // Check if blocked (inclusive start, exclusive end logic handled by data prep)
+    // But since we fixed the logic to save Strings properly, simple comparison works:
     const isBlocked = blockedRanges.some(b => dateKey >= b.start && dateKey < b.end);
 
     return (
       <div className="flex flex-col items-center justify-center h-full w-full relative pb-1">
-        {/* Gün Numarası */}
+        {/* Day Number */}
         <span className={`text-sm font-semibold z-10 ${isBlocked ? "line-through text-neutral-400" : "text-neutral-700"}`}>
             {day}
         </span>
         
-        {/* Alt Bilgi: Fiyat veya Blok İkonu */}
+        {/* Content Layer: Price or Block Icon */}
         <div className="absolute bottom-1 left-0 right-0 flex justify-center">
             {isBlocked ? (
                  <Ban size={10} className="text-rose-400" />
@@ -119,25 +120,21 @@ export default function PriceCalendar({
     );
   };
 
-  // Bloklu günleri Date objesine çevirelim ki takvimde seçilemesin (İsteğe bağlı)
-  // Ancak admin panelinde bazen bloklu günü seçip açmak isteyebiliriz, 
-  // o yüzden 'excludeDateIntervals' kullanmıyorum, sadece görsel olarak işaretliyorum.
-
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      {/* SOL: TAKVİM */}
+      {/* LEFT: CALENDAR */}
       <div className="lg:col-span-7 bg-white p-6 rounded-[32px] border border-neutral-100 shadow-sm flex flex-col items-center">
         
         <div className="flex bg-neutral-100 p-1 rounded-xl mb-6 w-full max-w-sm">
             <button onClick={() => setMode("price")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${mode === "price" ? "bg-white shadow text-emerald-700" : "text-neutral-500 hover:text-neutral-700"}`}>
-                <Euro size={16}/> Fiyat Gir
+                <Euro size={16}/> Set Price
             </button>
             <button onClick={() => setMode("block")} className={`flex-1 flex items-center justify-center gap-2 py-2.5 text-sm font-bold rounded-lg transition-all ${mode === "block" ? "bg-white shadow text-rose-600" : "text-neutral-500 hover:text-neutral-700"}`}>
-                <CalendarOff size={16}/> Bloklama
+                <CalendarOff size={16}/> Block Dates
             </button>
         </div>
 
-        {/* CUSTOM CSS Wrapper */}
+        {/* Custom Styling for the Calendar Box */}
         <style>{`
             .react-datepicker { font-family: inherit; border: none; box-shadow: none; }
             .react-datepicker__header { bg-white; border-bottom: none; background-color: white; }
@@ -157,35 +154,35 @@ export default function PriceCalendar({
             selectsRange
             inline
             locale="tr"
-            renderDayContents={renderDayContents}
+            renderDayContents={renderDayContents} // <--- The Fix
             calendarClassName="!border-none"
-            minDate={new Date()} // Geçmişi kilitle
+            minDate={new Date()}
         />
       </div>
 
-      {/* SAĞ: İŞLEM PANELİ */}
+      {/* RIGHT: ACTION PANEL */}
       <div className="lg:col-span-5 bg-neutral-900 text-white p-8 rounded-[32px] h-fit shadow-xl">
         {mode === "price" ? (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-emerald-400"><Euro size={20}/> Fiyat Tanımla</h3>
+                <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-emerald-400"><Euro size={20}/> Set Price</h3>
                 <div className="relative mb-4">
                   <input type="number" value={priceInput} onChange={(e) => setPriceInput(e.target.value)} placeholder="0" className="w-full bg-neutral-800 p-4 rounded-xl text-3xl font-bold outline-none focus:ring-2 focus:ring-emerald-500"/>
                   <span className="absolute right-4 top-1/2 -translate-y-1/2 text-neutral-500 font-bold">€</span>
                 </div>
                 <button onClick={handleSavePrice} disabled={loading || !startDate} className="w-full bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white p-4 rounded-xl font-bold text-lg flex items-center justify-center gap-2 transition-colors">
-                  {loading ? <Loader2 className="animate-spin" /> : <Save size={20} />} Kaydet
+                  {loading ? <Loader2 className="animate-spin" /> : <Save size={20} />} Save Price
                 </button>
             </div>
         ) : (
             <div className="animate-in fade-in slide-in-from-right-4 duration-300">
-                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-rose-400"><CalendarOff size={20}/> Müsaitlik Yönetimi</h3>
-                <p className="text-sm text-neutral-400 mb-6 leading-relaxed">Seçili günleri kapatmak veya tekrar açmak için:</p>
+                 <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-rose-400"><CalendarOff size={20}/> Availability</h3>
+                <p className="text-sm text-neutral-400 mb-6 leading-relaxed">Select dates to close or open.</p>
                 <div className="grid grid-cols-2 gap-3">
                     <button onClick={() => handleBlockToggle(true)} disabled={loading || !startDate} className="bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white p-4 rounded-xl font-bold flex flex-col items-center justify-center gap-2 transition-colors">
-                        {loading ? <Loader2 className="animate-spin" /> : <Ban size={24} />} Kapat
+                        {loading ? <Loader2 className="animate-spin" /> : <Ban size={24} />} Block
                     </button>
                     <button onClick={() => handleBlockToggle(false)} disabled={loading || !startDate} className="bg-neutral-700 hover:bg-neutral-600 disabled:opacity-50 text-white p-4 rounded-xl font-bold flex flex-col items-center justify-center gap-2 transition-colors">
-                        {loading ? <Loader2 className="animate-spin" /> : <Unlock size={24} />} Aç
+                        {loading ? <Loader2 className="animate-spin" /> : <Unlock size={24} />} Open
                     </button>
                 </div>
             </div>
@@ -193,12 +190,12 @@ export default function PriceCalendar({
 
         {startDate && (
           <div className="mt-6 pt-6 border-t border-neutral-800 text-center animate-in fade-in">
-             <p className="text-neutral-500 text-[10px] uppercase font-bold tracking-widest mb-1">Seçili Aralık</p>
+             <p className="text-neutral-500 text-[10px] uppercase font-bold tracking-widest mb-1">Selected Range</p>
              <p className="text-white text-lg font-bold">
                 {format(startDate, "d MMM", { locale: tr })} 
                 {endDate && ` - ${format(endDate, "d MMM", { locale: tr })}`}
              </p>
-             <button onClick={() => { setStartDate(null); setEndDate(null); }} className="mt-3 text-xs text-neutral-500 hover:text-white flex items-center justify-center gap-1 mx-auto transition-colors"><RotateCcw size={12}/> Temizle</button>
+             <button onClick={() => { setStartDate(null); setEndDate(null); }} className="mt-3 text-xs text-neutral-500 hover:text-white flex items-center justify-center gap-1 mx-auto transition-colors"><RotateCcw size={12}/> Clear</button>
           </div>
         )}
       </div>

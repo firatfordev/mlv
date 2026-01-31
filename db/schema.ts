@@ -3,7 +3,7 @@ import { relations, sql } from "drizzle-orm";
 // --- ENUMS ---
 export const userRoleEnum = pgEnum('user_role', ['admin', 'editor', 'guest']);
 export const bookingStatusEnum = pgEnum('booking_status', ['pending', 'awaiting_payment', 'confirmed', 'cancelled', 'completed']);
-export const discountTypeEnum = pgEnum('discount_type', ['percentage', 'fixed_amount']);
+export const discountTypeEnum = pgEnum('discount_type', ['percentage', 'fixed_amount', 'free_days']);
 export const featureCategoryEnum = pgEnum('feature_category', ['pool', 'kitchen', 'outdoor', 'entertainment', 'other']);
 
 // --- 1. CORE SYSTEM ---

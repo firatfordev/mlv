@@ -2,7 +2,7 @@ import { db } from "@/db";
 import { promotions } from "@/db/schema";
 import { createPromotionAction, deletePromotionAction } from "@/actions/admin/promotion-actions";
 import { desc } from "drizzle-orm";
-import { Tag, Calendar, Layers, Trash2, Plus, Clock, Ticket } from "lucide-react";
+import { Tag, Calendar, Layers, Trash2, Plus, Clock, Ticket, Gift, AlertCircle } from "lucide-react";
 
 export default async function PromotionsPage() {
   const promoList = await db.query.promotions.findMany({
@@ -33,25 +33,32 @@ export default async function PromotionsPage() {
               <div className="space-y-3">
                 <div>
                   <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider ml-1">Kampanya Adı</label>
-                  <input name="name" placeholder="Örn: Erken Rezervasyon Yaz" className="w-full bg-neutral-800 border border-neutral-700 p-3 rounded-xl mt-1 outline-none focus:border-blue-500 transition-colors" required />
+                  <input name="name" placeholder="Örn: 7 Kal 6 Öde" className="w-full bg-neutral-800 border border-neutral-700 p-3 rounded-xl mt-1 outline-none focus:border-blue-500 transition-colors" required />
                 </div>
                 
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider ml-1">İndirim Tipi</label>
-                    <select name="type" className="w-full bg-neutral-800 border border-neutral-700 p-3 rounded-xl mt-1 outline-none">
+                    <select name="type" className="w-full bg-neutral-800 border border-neutral-700 p-3 rounded-xl mt-1 outline-none text-sm font-medium">
                       <option value="percentage">Yüzde (%)</option>
                       <option value="fixed_amount">Tutar (€)</option>
+                      <option value="free_days">Bedava Gün (Stay X Pay Y)</option>
                     </select>
                   </div>
                   <div>
                     <label className="text-[10px] font-bold text-neutral-400 uppercase tracking-wider ml-1">Değer</label>
-                    <input name="value" type="number" placeholder="10" className="w-full bg-neutral-800 border border-neutral-700 p-3 rounded-xl mt-1 outline-none" required />
+                    <input name="value" type="number" step="0.1" placeholder="10" className="w-full bg-neutral-800 border border-neutral-700 p-3 rounded-xl mt-1 outline-none" required />
                   </div>
+                </div>
+                
+                {/* Helper Text for Free Days */}
+                <div className="text-[10px] text-neutral-400 bg-neutral-800 p-2 rounded-lg flex items-start gap-2">
+                   <AlertCircle size={12} className="shrink-0 mt-0.5" />
+                   <span><b>Bedava Gün için:</b> Değer kısmına kaç günün ücretsiz olacağını yazın (Örn: 1). Min Gece kısmına toplam süreyi yazın (Örn: 7).</span>
                 </div>
               </div>
 
-              {/* 2. CONDITIONS (YENİ EKLEDİKLERİMİZ) */}
+              {/* 2. CONDITIONS */}
               <div className="bg-neutral-800/50 p-4 rounded-xl border border-neutral-700/50 space-y-4">
                  <p className="text-[10px] font-bold text-blue-400 uppercase tracking-wider flex items-center gap-1">
                     <Clock size={12} /> Koşullar (Opsiyonel)
@@ -100,8 +107,8 @@ export default async function PromotionsPage() {
             <div key={promo.id} className="bg-white p-6 rounded-[24px] border border-neutral-100 shadow-sm flex flex-col md:flex-row md:items-center justify-between gap-6 group hover:border-blue-200 transition-colors">
               
               <div className="flex items-start gap-5">
-                <div className={`p-4 rounded-2xl ${promo.code ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
-                  {promo.code ? <Ticket size={24} /> : <Tag size={24} />}
+                <div className={`p-4 rounded-2xl ${promo.type === 'free_days' ? 'bg-orange-100 text-orange-600' : promo.code ? 'bg-purple-100 text-purple-600' : 'bg-blue-50 text-blue-600'}`}>
+                  {promo.type === 'free_days' ? <Gift size={24} /> : promo.code ? <Ticket size={24} /> : <Tag size={24} />}
                 </div>
                 <div>
                   <h3 className="font-bold text-xl text-neutral-900 flex items-center gap-2">
@@ -112,7 +119,9 @@ export default async function PromotionsPage() {
                   {/* TAGS */}
                   <div className="flex flex-wrap gap-2 mt-2">
                     <Badge color="bg-neutral-100 text-neutral-600">
-                      {promo.type === 'percentage' ? `%${promo.value} İndirim` : `-${promo.value}€ İndirim`}
+                      {promo.type === 'percentage' && `%${promo.value} İndirim`}
+                      {promo.type === 'fixed_amount' && `-${promo.value}€ İndirim`}
+                      {promo.type === 'free_days' && `${promo.value} Gün Ücretsiz`}
                     </Badge>
                     
                     {promo.isStackable && <Badge color="bg-green-100 text-green-700 border-green-200">Stackable</Badge>}

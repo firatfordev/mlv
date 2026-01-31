@@ -1,18 +1,18 @@
 import { db } from "@/db";
-import { dailyPrices, propertyPromotions, promotions } from "@/db/schema";
+import { dailyPrices, propertyPromotions, properties } from "@/db/schema";
 import { and, eq, gte, lt } from "drizzle-orm";
 
 export async function calculatePriceForRange(
   propertyId: number, 
   startDate: Date, 
-  endDate: Date
+  endDate: Date,
+  couponCode?: string 
 ) {
-  // Normalize Dates (Strip time to avoid timezone bugs)
   const startStr = startDate.toISOString().split('T')[0];
   const endStr = endDate.toISOString().split('T')[0];
+  const today = new Date();
 
-  // 1. GET DAILY PRICES
-  // We fetch prices where date >= start AND date < end (Checkout day is not priced)
+  // 1. GET PRICES
   const prices = await db.query.dailyPrices.findMany({
     where: and(
       eq(dailyPrices.propertyId, propertyId),
@@ -21,69 +21,137 @@ export async function calculatePriceForRange(
     )
   });
 
-  // Validation: Ensure we found prices for every night
-  const daysDiff = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24));
-  if (prices.length < daysDiff) {
-    return null; // Missing prices for some days
-  }
+  if (prices.length === 0) return null;
 
-  // Sum Base Price
-  let totalPrice = prices.reduce((sum, p) => sum + Number(p.price), 0);
-  const currency = prices[0]?.currency || "EUR";
+  // 2. GET SETTINGS
+  const villa = await db.query.properties.findFirst({
+    where: eq(properties.id, propertyId),
+    columns: {
+      cleaningFee: true,
+      minStayForCleaning: true,
+      depositFee: true,
+      baseCurrency: true,
+    }
+  });
 
-  // 2. CHECK PROMOTIONS
-  const activePromos = await db
-    .select({
-      id: promotions.id,
-      name: promotions.name,
-      type: promotions.type,
-      value: promotions.value,
-      minStay: promotions.minStay,
-      start: promotions.bookingWindowStart,
-      end: promotions.bookingWindowEnd,
-    })
-    .from(propertyPromotions)
-    .innerJoin(promotions, eq(propertyPromotions.promotionId, promotions.id))
-    .where(and(
-      eq(propertyPromotions.propertyId, propertyId),
-      eq(promotions.isActive, true)
-    ));
+  if (!villa) return null;
 
-  const appliedPromotions: { name: string; amount: number }[] = [];
+  // --- CALCULATION ---
+  const duration = prices.length;
+  let basePrice = prices.reduce((sum, p) => sum + Number(p.price), 0);
 
-  // 3. APPLY PROMOTIONS
-  for (const promo of activePromos) {
-    let isValid = true;
+  // 3. GET PROMOS
+  const rawPromos = await db.query.propertyPromotions.findMany({
+    where: eq(propertyPromotions.propertyId, propertyId),
+    with: { promotion: true }
+  });
 
-    // Condition: Min Stay
-    if (promo.minStay && daysDiff < promo.minStay) isValid = false;
+  const validPromos = rawPromos
+    .map(p => p.promotion)
+    .filter(p => {
+      if (!p || !p.isActive) return false;
 
-    // Condition: Booking Window
-    const todayStr = new Date().toISOString().split('T')[0];
-    if (promo.start && todayStr < promo.start) isValid = false;
-    if (promo.end && todayStr > promo.end) isValid = false;
+      // Code Check
+      if (p.code && !couponCode) return false;
+      if (p.code && couponCode && p.code.toUpperCase() !== couponCode.toUpperCase()) return false;
 
-    if (isValid) {
-      let discountAmount = 0;
-      const val = Number(promo.value);
-
-      if (promo.type === "percentage") {
-        discountAmount = totalPrice * (val / 100);
-      } else if (promo.type === "fixed_amount") {
-        discountAmount = val;
+      // Early Bird
+      if (p.advanceBookingDays) {
+        const diffTime = Math.abs(startDate.getTime() - today.getTime());
+        const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+        if (diffDays < p.advanceBookingDays) return false;
       }
 
-      totalPrice -= discountAmount;
-      appliedPromotions.push({ name: promo.name, amount: discountAmount });
+      // Min Stay
+      const minStay = Number(p.minStay) || 0;
+      if (minStay > 0 && duration < minStay) return false;
+
+      // Date Ranges
+      if (p.travelWindowStart && new Date(p.travelWindowStart) > startDate) return false;
+      if (p.travelWindowEnd && new Date(p.travelWindowEnd) < endDate) return false;
+
+      return true;
+    });
+
+  // 4. APPLY DISCOUNTS
+  let totalDiscount = 0;
+  let appliedPromotions: { name: string; amount: number }[] = [];
+  
+  // Helper: Calculate discount amount based on type
+  const calculateAmount = (promo: typeof validPromos[0]) => {
+    if (!promo) return 0;
+    const val = Number(promo.value);
+
+    if (promo.type === 'percentage') {
+      return basePrice * (val / 100);
+    } 
+    else if (promo.type === 'fixed_amount') {
+      return val;
+    }
+    // --- NEW LOGIC FOR FREE DAYS ---
+    else if (promo.type === 'free_days') {
+      // 1. Get all daily prices
+      const dailyAmounts = prices.map(p => Number(p.price));
+      
+      // 2. Sort lowest to highest
+      dailyAmounts.sort((a, b) => a - b);
+      
+      // 3. Take the lowest X days (where X is promo value, e.g., 1)
+      const freeDaysCount = Math.floor(val);
+      const freeAmounts = dailyAmounts.slice(0, freeDaysCount);
+      
+      // 4. Sum them up (This is the discount amount)
+      return freeAmounts.reduce((sum, curr) => sum + curr, 0);
+    }
+    return 0;
+  };
+
+  // A. Non-Stackable
+  const nonStackables = validPromos.filter(p => !p?.isStackable);
+  let bestDiscount = 0;
+  let bestPromo = null;
+
+  for (const promo of nonStackables) {
+    if(!promo) continue;
+    const amount = calculateAmount(promo);
+    if (amount > bestDiscount) {
+      bestDiscount = amount;
+      bestPromo = promo;
     }
   }
 
-  if (totalPrice < 0) totalPrice = 0;
+  if (bestPromo) {
+    totalDiscount += bestDiscount;
+    appliedPromotions.push({ name: bestPromo.name, amount: bestDiscount });
+  }
+
+  // B. Stackable
+  const stackables = validPromos.filter(p => p?.isStackable);
+  for (const promo of stackables) {
+    if(!promo) continue;
+    const amount = calculateAmount(promo);
+    totalDiscount += amount;
+    appliedPromotions.push({ name: promo.name, amount: amount });
+  }
+
+  // 5. FINALIZE
+  let cleaningFee = 0;
+  if (villa.minStayForCleaning && duration < villa.minStayForCleaning) {
+    cleaningFee = Number(villa.cleaningFee) || 0;
+  }
+
+  const priceAfterDiscount = Math.max(0, basePrice - totalDiscount);
+  const totalPrice = priceAfterDiscount + cleaningFee;
 
   return {
-    originalPrice: prices.reduce((sum, p) => sum + Number(p.price), 0),
+    currency: villa.baseCurrency || "EUR",
+    duration,
+    basePrice,
+    cleaningFee,
+    totalDiscount,
+    appliedPromotions,
     finalPrice: totalPrice,
-    currency,
-    appliedPromotions
+    depositFee: Number(villa.depositFee) || 0,
+    originalPrice: basePrice + cleaningFee 
   };
 }
