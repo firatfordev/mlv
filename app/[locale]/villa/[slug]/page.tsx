@@ -6,7 +6,7 @@ import { notFound } from "next/navigation";
 import Image from "next/image";
 import BookingWidget from "@/components/front/BookingWidget";
 import { MapPin, Users, Bed, Bath, Wifi, Waves, Wind } from "lucide-react";
-
+import VillaBreadcrumb from "@/components/front/VillaBreadcrumb";
 export default async function VillaDetailPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const villa = await getVillaBySlug(slug);
@@ -41,6 +41,10 @@ export default async function VillaDetailPage({ params }: { params: Promise<{ sl
   return (
     <main className="max-w-7xl mx-auto px-6 py-8">
       {/* 1. GALERİ (Basit Grid) */}
+      <VillaBreadcrumb 
+             locationId={villa.locationId} 
+             villaTitle={villa.title} 
+          />
       <div className="grid grid-cols-1 md:grid-cols-4 gap-2 h-[500px] rounded-[32px] overflow-hidden mb-8">
         {villa.images.slice(0, 5).map((img, i) => (
           <div key={img.id} className={`relative ${i === 0 ? "md:col-span-2 md:row-span-2" : "col-span-1"}`}>

@@ -1,157 +1,133 @@
 "use client";
 
 import { useState } from "react";
-import { toggleFeatureAction, toggleHighlightAction } from "@/actions/admin/feature-actions";
-import { 
-  Waves, ThermometerSun, Bath, ChefHat, Utensils, Wifi, Tv, Wind, Sunset, ShieldCheck, 
-  CheckCircle2, Circle, Star, Loader2 
-} from "lucide-react";
+import { toggleFeatureAction } from "@/actions/admin/feature-actions";
+import { Star, Check, Loader2, Sparkles, Coffee } from "lucide-react";
+import { useRouter } from "next/navigation";
 
-// Seed dosyasındaki ikon isimlerini bileşenlerle eşleştiriyoruz
-const ICON_MAP: Record<string, any> = {
-  "Waves": Waves,
-  "ThermometerSun": ThermometerSun,
-  "Bath": Bath,
-  "ChefHat": ChefHat,
-  "Utensils": Utensils,
-  "Wifi": Wifi,
-  "Tv": Tv,
-  "Wind": Wind,
-  "Sunset": Sunset,
-  "ShieldCheck": ShieldCheck,
+type FeatureManagerProps = {
+  propertyId: number;
+  masterFeatures: any[]; // The list from DB
+  activeFeatures: { featureId: number; isHighlighted: boolean }[];
 };
 
-// TİP TANIMLAMALARI
-type MasterFeature = {
-  id: number;
-  label: any; 
-  category: string | null; // <-- BURAYA | null EKLEDİK
-  icon: string | null;     // <-- BURAYA | null EKLEDİK
-};
+export default function FeatureManager({ propertyId, masterFeatures, activeFeatures }: FeatureManagerProps) {
+  const router = useRouter();
+  const [loadingIds, setLoadingIds] = useState<number[]>([]);
 
-type ActiveFeature = {
-  featureId: number;
-  isHighlighted: boolean;
-};
+  // Split Logic
+  const featureCategories = ['pool', 'outdoor', 'entertainment'];
+  const amenityCategories = ['kitchen', 'other'];
 
-export default function FeatureManager({ 
-  propertyId, 
-  masterFeatures, 
-  activeFeatures 
-}: { 
-  propertyId: number; 
-  masterFeatures: MasterFeature[];
-  activeFeatures: ActiveFeature[];
-}) {
-  // State'i local olarak yönetelim (Optimistik UI için)
-  const [actives, setActives] = useState<ActiveFeature[]>(activeFeatures);
-  const [loadingId, setLoadingId] = useState<number | null>(null);
+  const featuresList = masterFeatures.filter(f => featureCategories.includes(f.category));
+  const amenitiesList = masterFeatures.filter(f => amenityCategories.includes(f.category));
 
-  // Gruplama Fonksiyonu (Kategorilere ayır)
-  const groupedFeatures = masterFeatures.reduce((acc, feat) => {
-    const cat = feat.category || "other";
-    if (!acc[cat]) acc[cat] = [];
-    acc[cat].push(feat);
-    return acc;
-  }, {} as Record<string, MasterFeature[]>);
+  // --- ACTION ---
+  const handleToggle = async (featureId: number, currentHighlight: boolean, isHighlightToggle: boolean) => {
+    // Prevent double clicks
+    if (loadingIds.includes(featureId)) return;
+    setLoadingIds(prev => [...prev, featureId]);
 
-  // Kategori Başlıkları (İsteğe bağlı çeviri)
-  const categoryLabels: Record<string, string> = {
-    pool: "Havuz & Spa",
-    kitchen: "Mutfak",
-    entertainment: "Eğlence",
-    outdoor: "Dış Mekan",
-    other: "Diğer Özellikler"
-  };
+    const isActive = activeFeatures.some(f => f.featureId === featureId);
+    
+    // Logic:
+    // 1. If clicking Highlight Star -> Toggle Highlight (Feature must be active first)
+    // 2. If clicking Box -> Toggle Active (If removing, remove highlight too)
+    
+    let shouldBeActive = isActive;
+    let shouldBeHighlighted = currentHighlight;
 
-  // 1. ÖZELLİK AÇ/KAPA HANDLER
-  const handleToggle = async (featId: number) => {
-    const existing = actives.find(a => a.featureId === featId);
-    setLoadingId(featId);
-
-    // Optimistik Update (Arayüz hemen değişsin)
-    if (existing) {
-      setActives(prev => prev.filter(a => a.featureId !== featId));
+    if (isHighlightToggle) {
+        if (!isActive) shouldBeActive = true; // Auto-activate if highlighting
+        shouldBeHighlighted = !currentHighlight;
     } else {
-      setActives(prev => [...prev, { featureId: featId, isHighlighted: false }]);
+        shouldBeActive = !isActive;
+        if (!shouldBeActive) shouldBeHighlighted = false; // Reset highlight if removing
     }
 
-    // Server Action
-    await toggleFeatureAction(propertyId, featId, !!existing);
-    setLoadingId(null);
-  };
-
-  // 2. HIGHLIGHT HANDLER
-  const handleHighlight = async (e: React.MouseEvent, featId: number) => {
-    e.stopPropagation(); // Parent click tetiklenmesin
-    const existing = actives.find(a => a.featureId === featId);
-    if (!existing) return; // Seçili olmayan şeye yıldız verilemez
-
-    // Optimistik Update
-    setActives(prev => prev.map(a => 
-      a.featureId === featId ? { ...a, isHighlighted: !a.isHighlighted } : a
-    ));
-
-    await toggleHighlightAction(propertyId, featId, existing.isHighlighted);
+    await toggleFeatureAction(propertyId, featureId, shouldBeActive, shouldBeHighlighted);
+    
+    router.refresh();
+    setLoadingIds(prev => prev.filter(id => id !== featureId));
   };
 
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-      {Object.entries(groupedFeatures).map(([category, features]) => (
-        <div key={category} className="bg-white p-6 rounded-[32px] border border-neutral-100 shadow-sm">
-          <h3 className="text-lg font-bold text-neutral-900 mb-4 flex items-center gap-2 capitalize">
-            {categoryLabels[category] || category}
-            <span className="text-xs bg-neutral-100 text-neutral-400 px-2 py-1 rounded-full">{features.length}</span>
-          </h3>
-          
-          <div className="space-y-3">
-            {features.map((feat) => {
-              const active = actives.find(a => a.featureId === feat.id);
-              const isSelected = !!active;
-              const IconComponent = feat.icon ? ICON_MAP[feat.icon] : Circle;
+    <div className="grid grid-cols-1 xl:grid-cols-2 gap-8">
+      
+      {/* COLUMN 1: KEY FEATURES (With Highlight Option) */}
+      <div className="bg-white p-6 rounded-[24px] border border-neutral-200">
+         <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-neutral-800">
+            <Sparkles className="text-orange-500 fill-orange-500" size={20} /> Key Features
+         </h3>
+         <div className="space-y-2">
+            {featuresList.map(feat => {
+               const activeState = activeFeatures.find(f => f.featureId === feat.id);
+               const isActive = !!activeState;
+               const isHighlighted = activeState?.isHighlighted || false;
+               const isLoading = loadingIds.includes(feat.id);
 
-              return (
-                <div 
-                  key={feat.id}
-                  onClick={() => handleToggle(feat.id)}
-                  className={`
-                    group flex items-center justify-between p-3 rounded-2xl border cursor-pointer transition-all select-none
-                    ${isSelected 
-                      ? "bg-neutral-900 border-neutral-900 text-white shadow-lg" 
-                      : "bg-white border-neutral-100 text-neutral-500 hover:border-neutral-300 hover:bg-neutral-50"
-                    }
-                  `}
-                >
-                  <div className="flex items-center gap-3">
-                    <div className={`p-2 rounded-xl ${isSelected ? "bg-white/20" : "bg-neutral-100 text-neutral-400"}`}>
-                      {loadingId === feat.id ? <Loader2 size={18} className="animate-spin" /> : <IconComponent size={18} />}
-                    </div>
-                    <span className="font-bold text-sm">{(feat.label as any).tr}</span>
-                  </div>
-
-                  {/* Highlight Star Button */}
-                  {isSelected && (
-                    <button
-                      onClick={(e) => handleHighlight(e, feat.id)}
-                      className={`
-                        p-2 rounded-full transition-all hover:scale-110 active:scale-95
-                        ${active.isHighlighted ? "text-yellow-400 bg-white/20" : "text-neutral-600 hover:text-yellow-400"}
-                      `}
-                      title="Öne Çıkan Özellik Yap"
+               return (
+                 <div key={feat.id} className={`group flex items-center justify-between p-3 rounded-xl border transition-all ${isActive ? 'bg-orange-50 border-orange-200' : 'bg-white border-neutral-100 hover:border-neutral-300'}`}>
+                    
+                    {/* Main Toggle Area */}
+                    <div 
+                        onClick={() => handleToggle(feat.id, isHighlighted, false)}
+                        className="flex items-center gap-3 cursor-pointer flex-1 select-none"
                     >
-                      <Star size={18} fill={active.isHighlighted ? "currentColor" : "none"} />
+                        <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isActive ? 'bg-orange-500 border-orange-500 text-white' : 'border-neutral-300 bg-white'}`}>
+                           {isActive && <Check size={14} strokeWidth={3} />}
+                        </div>
+                        <span className={`text-sm font-bold ${isActive ? 'text-neutral-900' : 'text-neutral-500'}`}>
+                           {(feat.label as any).tr}
+                        </span>
+                    </div>
+
+                    {/* Highlight Star Toggle */}
+                    <button 
+                       onClick={() => handleToggle(feat.id, isHighlighted, true)}
+                       disabled={isLoading}
+                       className={`p-2 rounded-full transition-all ${isHighlighted ? 'text-orange-500 bg-white shadow-sm' : 'text-neutral-200 hover:text-orange-300'}`}
+                       title="Highlight on card"
+                    >
+                       {isLoading ? <Loader2 size={18} className="animate-spin text-neutral-400" /> : <Star size={18} className={isHighlighted ? "fill-orange-500" : ""} />}
                     </button>
-                  )}
-                  
-                  {!isSelected && (
-                    <div className="w-5 h-5 rounded-full border-2 border-neutral-200 group-hover:border-neutral-400" />
-                  )}
-                </div>
-              );
+                 </div>
+               );
             })}
-          </div>
-        </div>
-      ))}
+            {featuresList.length === 0 && <p className="text-sm text-neutral-400 p-2">Create features in Admin -- Features.</p>}
+         </div>
+      </div>
+
+      {/* COLUMN 2: AMENITIES (Simple List) */}
+      <div className="bg-white p-6 rounded-[24px] border border-neutral-200">
+         <h3 className="font-bold text-lg mb-4 flex items-center gap-2 text-neutral-800">
+            <Coffee className="text-neutral-500" size={20} /> Amenities
+         </h3>
+         <div className="grid grid-cols-2 gap-2">
+            {amenitiesList.map(feat => {
+               const activeState = activeFeatures.find(f => f.featureId === feat.id);
+               const isActive = !!activeState;
+               const isLoading = loadingIds.includes(feat.id);
+
+               return (
+                 <div 
+                    key={feat.id} 
+                    onClick={() => handleToggle(feat.id, false, false)}
+                    className={`cursor-pointer flex items-center gap-3 p-3 rounded-xl border transition-all select-none ${isActive ? 'bg-neutral-100 border-neutral-300' : 'bg-white border-neutral-100 hover:border-neutral-300'}`}
+                 >
+                    <div className={`w-5 h-5 rounded-md border flex items-center justify-center transition-colors ${isActive ? 'bg-neutral-800 border-neutral-800 text-white' : 'border-neutral-300 bg-white'}`}>
+                       {isActive && (isLoading ? <Loader2 size={12} className="animate-spin"/> : <Check size={14} strokeWidth={3} />)}
+                    </div>
+                    <span className={`text-sm font-bold ${isActive ? 'text-neutral-900' : 'text-neutral-500'}`}>
+                       {(feat.label as any).tr}
+                    </span>
+                 </div>
+               );
+            })}
+             {amenitiesList.length === 0 && <p className="text-sm text-neutral-400 p-2 col-span-2">Create amenities in Admin -- Features.</p>}
+         </div>
+      </div>
+
     </div>
   );
 }
